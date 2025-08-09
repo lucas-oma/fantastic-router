@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:15
+    container_name: fantastic_router_db
+    environment:
+      POSTGRES_DB: property_mgmt
+      POSTGRES_USER: fantastic_user
+      POSTGRES_PASSWORD: fantastic_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fantastic_user -d property_mgmt"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Fantastic Router Application
+  app:
+    build: 
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: fantastic_router_app
+    environment:
+      - DATABASE_URL=postgresql://fantastic_user:fantastic_pass@postgres:5432/property_mgmt
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your-api-key-here}
+      - PYTHONPATH=/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../examples:/app/examples
+      - ../packages:/app/packages
+      - ../adapters:/app/adapters
+    # Default command now runs FastAPI server (from Dockerfile)
+    # Override for testing: command: python examples/quickstart/example.py
+
+  # Optional: pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: fantastic_router_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@fantastic-router.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8080:80"
+    depends_on:
+      - postgres
+    profiles:
+      - admin
+
+volumes:
+  postgres_data: 
