@@ -4,6 +4,8 @@
   <img src="assets/images/docs/fantastic-router.png" alt="Fantastic Router" height="120" />
 </div>
 
+> ⚠️ Warning: Fantastic Router is still in active development. Expect rapid changes, incomplete features, and the occasional bug while we build toward a stable release.
+
 **An LLM-powered intent router for your website!**
 
 Transform natural language queries into precise navigation actions. Instead of forcing users to navigate complex menus, let them simply say what they want: *"show me James Smith's monthly income"* → `/landlords/james-smith-123/financials`
@@ -81,7 +83,7 @@ make db-shell    # Open PostgreSQL shell
 make clean       # Clean up containers and volumes
 ```
 
-### Option 2: Manual Installation
+### Option 2: Manual Installation (still testing this, proceed with caution)
 
 ```bash
 # Core library
@@ -266,7 +268,7 @@ class CustomDatabaseClient:
         return [{"id": "123", "name": "James Smith"}]
 ```
 
-### RBAC Integration
+### RBAC Integration (work in progress)
 
 ```python
 action = await router.plan(
@@ -275,7 +277,8 @@ action = await router.plan(
 )
 ```
 
-## 🏢 Enterprise Features
+<!-- Not setup -->
+<!-- ## 🏢 Enterprise Features
 
 The enterprise version includes:
 
@@ -283,19 +286,20 @@ The enterprise version includes:
 - **📊 Analytics Dashboard**: Query success rates, performance metrics
 - **🔧 Custom Domain Training**: Train the router on your specific domain
 - **🏗️ On-Premise Deployment**: Keep your data secure
-- **📞 Priority Support**: Dedicated support team
+- **📞 Priority Support**: Dedicated support team -->
 
-## 🛣️ Roadmap
+<!-- ## 🛣️ Roadmap
 
 - [ ] **v0.2**: Web UI for configuration management
 - [ ] **v0.3**: Semantic search with vector embeddings  
 - [ ] **v0.4**: Multi-language support
 - [ ] **v0.5**: GraphQL API integration
-- [ ] **v1.0**: Production-ready with enterprise features
+- [ ] **v1.0**: Production-ready with enterprise features -->
 
 ## 🤝 Contributing
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We welcome contributions! 
+<!-- See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. -->
 
 ### Development Setup
 
@@ -329,11 +333,11 @@ GNU v3 License - see [LICENSE](LICENSE) for details.
 
 ## 🙋‍♂️ Support
 
-- **Documentation**: [https://fantastic-router.readthedocs.io](https://fantastic-router.readthedocs.io)
+<!-- - **Documentation**: [https://fantastic-router.readthedocs.io](https://fantastic-router.readthedocs.io) -->
 - **Issues**: [GitHub Issues](https://github.com/yourusername/fantastic-router/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/yourusername/fantastic-router/discussions)
-- **Enterprise**: [Contact Sales](mailto:sales@fantastic-router.com)
+<!-- - **Enterprise**: [Contact Sales](mailto:sales@fantastic-router.com) -->
 
 ---
 
-**Made with ❤️ for developers who believe navigation should be intuitive.**
+**Made with ❤️ by developers who believe navigation should be intuitive.**
