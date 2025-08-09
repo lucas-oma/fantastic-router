@@ -1,0 +1,3 @@
+import os
+EDITION = os.getenv("FR_EDITION", "COMMUNITY")  # COMMUNITY | ENTERPRISE
+VERSION = "0.1.0"
