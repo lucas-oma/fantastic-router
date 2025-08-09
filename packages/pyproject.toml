@@ -1,0 +1,19 @@
+[project]
+name = "fantastic-router"
+version = "0.1.0"
+requires-python = ">=3.10"
+description = "LLM-powered intent router for natural-language navigation."
+readme = "README.md"
+license = { text = "GNU v3" }
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.30.0",
+  "pydantic>=2.8.2",
+]
+
+[tool.setuptools.packages.find]
+where = ["packages/fantastic_router_core/src", "packages/fantastic_router_server/src"]
+
+[tool.setuptools.package-dir]
+fantastic_router_core = "packages/fantastic_router_core/src/fantastic_router_core"
+fantastic_router_server = "packages/fantastic_router_server/src/fantastic_router_server"
