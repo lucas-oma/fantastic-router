@@ -329,7 +329,7 @@ make clean          # Reset everything
 
 ## 📄 License
 
-GNU v3 License - see [LICENSE](LICENSE) for details.
+GNU General Public License v3 (GPLv3) - see [LICENSE](LICENSE) for details.
 
 ## 🙋‍♂️ Support
 

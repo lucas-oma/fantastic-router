@@ -4,7 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.10"
 description = "LLM-powered intent router for natural-language navigation."
 readme = "README.md"
-license = { text = "GNU v3" }
+license = { text = "GNU General Public License v3 (GPLv3)" }
 dependencies = [
   "fastapi>=0.115.0",
   "uvicorn[standard]>=0.30.0",
