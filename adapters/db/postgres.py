@@ -7,8 +7,6 @@ import json
 from typing import List, Dict, Any, Optional
 import asyncio
 
-# TODO: here and in every db connector, we should have a list of restricted tables and/or columns.
-
 class PostgreSQLDatabaseClient:
     """PostgreSQL client that implements the DatabaseClient protocol"""
     
@@ -16,13 +14,72 @@ class PostgreSQLDatabaseClient:
         self,
         connection_string: str,
         max_connections: int = 10,
-        timeout: int = 30
+        timeout: int = 30,
+        restricted_tables: Optional[List[str]] = None,
+        restricted_columns: Optional[Dict[str, List[str]]] = None,
+        allowed_tables: Optional[List[str]] = None
     ):
         self.connection_string = connection_string
         self.max_connections = max_connections
         self.timeout = timeout
         self.pool: Optional[asyncpg.Pool] = None
         self._schema_cache: Dict[str, List[str]] = {}  # Cache table columns
+        
+        # Security: Restricted tables/columns that should never be accessed
+        self.restricted_tables = set(restricted_tables or [
+            'pg_', 'information_schema', 'pg_catalog', 'pg_toast',
+            'pg_stat', 'pg_statistic', 'pg_depend', 'pg_description',
+            'pg_attrdef', 'pg_constraint', 'pg_index', 'pg_trigger',
+            'pg_rewrite', 'pg_class', 'pg_type', 'pg_namespace',
+            'pg_operator', 'pg_proc', 'pg_aggregate', 'pg_am',
+            'pg_amop', 'pg_amproc', 'pg_language', 'pg_largeobject',
+            'pg_ts_config', 'pg_ts_dict', 'pg_ts_parser', 'pg_ts_template',
+            'pg_user_mapping', 'pg_foreign_server', 'pg_foreign_data_wrapper',
+            'pg_policy', 'pg_replication_origin', 'pg_subscription',
+            'pg_publication', 'pg_publication_tables', 'pg_publication_rel',
+            'pg_subscription_rel', 'pg_default_acl', 'pg_init_privs',
+            'pg_seclabel', 'pg_shseclabel', 'pg_collation', 'pg_conversion',
+            'pg_tablespace', 'pg_roles', 'pg_shadow', 'pg_group',
+            'pg_user', 'pg_rules', 'pg_views', 'pg_tables',
+            'pg_indexes', 'pg_stats', 'pg_matviews', 'pg_locks',
+            'pg_settings', 'pg_prepared_statements', 'pg_prepared_xacts',
+            'pg_stat_activity', 'pg_stat_database', 'pg_stat_user_tables',
+            'pg_stat_user_indexes', 'pg_stat_user_functions',
+            'pg_stat_xact_user_tables', 'pg_stat_xact_user_functions',
+            'pg_statio_user_tables', 'pg_statio_user_indexes',
+            'pg_statio_user_sequences', 'pg_stat_database_conflicts',
+            'pg_stat_user_tables', 'pg_stat_user_indexes',
+            'pg_stat_user_functions', 'pg_stat_xact_user_tables',
+            'pg_stat_xact_user_functions', 'pg_statio_user_tables',
+            'pg_statio_user_indexes', 'pg_statio_user_sequences',
+            'pg_stat_database_conflicts', 'pg_stat_bgwriter',
+            'pg_stat_progress_vacuum', 'pg_stat_progress_cluster',
+            'pg_stat_progress_create_index', 'pg_stat_progress_analyze',
+            'pg_stat_progress_basebackup', 'pg_stat_progress_copy',
+            'pg_stat_archiver', 'pg_stat_wal_receiver', 'pg_stat_subscription',
+            'pg_stat_ssl', 'pg_stat_gssapi', 'pg_stat_replication',
+            'pg_stat_database', 'pg_stat_user_tables', 'pg_stat_user_indexes',
+            'pg_stat_user_functions', 'pg_stat_xact_user_tables',
+            'pg_stat_xact_user_functions', 'pg_statio_user_tables',
+            'pg_statio_user_indexes', 'pg_statio_user_sequences',
+            'pg_stat_database_conflicts', 'pg_stat_bgwriter',
+            'pg_stat_progress_vacuum', 'pg_stat_progress_cluster',
+            'pg_stat_progress_create_index', 'pg_stat_progress_analyze',
+            'pg_stat_progress_basebackup', 'pg_stat_progress_copy',
+            'pg_stat_archiver', 'pg_stat_wal_receiver', 'pg_stat_subscription',
+            'pg_stat_ssl', 'pg_stat_gssapi', 'pg_stat_replication'
+        ])
+        
+        # Security: Specific columns that should never be accessed
+        self.restricted_columns = restricted_columns or {
+            'users': ['password_hash', 'password_salt', 'reset_token', 'api_key'],
+            'sessions': ['session_data', 'token_hash'],
+            'audit_logs': ['ip_address', 'user_agent', 'request_body'],
+            'config': ['secret_key', 'api_keys', 'private_data']
+        }
+        
+        # Security: Whitelist of allowed tables (if specified, only these are accessible)
+        self.allowed_tables = set(allowed_tables) if allowed_tables else None
     
     async def initialize(self):
         """Initialize the connection pool"""
@@ -37,6 +94,34 @@ class PostgreSQLDatabaseClient:
         """Close the connection pool"""
         if self.pool:
             await self.pool.close()
+    
+    def _validate_table_access(self, table: str) -> bool:
+        """Validate if a table can be accessed based on security rules"""
+        # Check if table is in restricted list
+        if any(restricted in table.lower() for restricted in self.restricted_tables):
+            return False
+        
+        # Check if table is in allowed list (whitelist mode)
+        if self.allowed_tables and table not in self.allowed_tables:
+            return False
+        
+        return True
+    
+    def _validate_column_access(self, table: str, column: str) -> bool:
+        """Validate if a column can be accessed based on security rules"""
+        # Check if column is restricted for this table
+        if table in self.restricted_columns and column in self.restricted_columns[table]:
+            return False
+        
+        return True
+    
+    def _filter_restricted_columns(self, table: str, columns: List[str]) -> List[str]:
+        """Filter out restricted columns from a list"""
+        if table not in self.restricted_columns:
+            return columns
+        
+        restricted = set(self.restricted_columns[table])
+        return [col for col in columns if col not in restricted]
     
     async def search(
         self,
@@ -66,6 +151,10 @@ class PostgreSQLDatabaseClient:
         async with self.pool.acquire() as conn:
             for table in tables:
                 try:
+                    # Security: Validate table access
+                    if not self._validate_table_access(table):
+                        continue  # Skip restricted tables
+                    
                     # Use cached columns if available
                     if table in self._schema_cache:
                         available_columns = self._schema_cache[table]
@@ -79,9 +168,11 @@ class PostgreSQLDatabaseClient:
                             table
                         )
                         available_columns = [row['column_name'] for row in table_columns]
+                        # Security: Filter out restricted columns
+                        available_columns = self._filter_restricted_columns(table, available_columns)
                         self._schema_cache[table] = available_columns  # Cache for next time
                     
-                    # Filter fields to only include existing columns
+                    # Filter fields to only include existing and allowed columns
                     valid_fields = [field for field in fields if field in available_columns]
                     
                     if not valid_fields:
@@ -257,7 +348,10 @@ def create_postgres_client(
     username: str,
     password: str,
     max_connections: int = 10,
-    timeout: int = 30
+    timeout: int = 30,
+    restricted_tables: Optional[List[str]] = None,
+    restricted_columns: Optional[Dict[str, List[str]]] = None,
+    allowed_tables: Optional[List[str]] = None
 ) -> PostgreSQLDatabaseClient:
     """Create a PostgreSQL database client"""
     
@@ -266,5 +360,8 @@ def create_postgres_client(
     return PostgreSQLDatabaseClient(
         connection_string=connection_string,
         max_connections=max_connections,
-        timeout=timeout
+        timeout=timeout,
+        restricted_tables=restricted_tables,
+        restricted_columns=restricted_columns,
+        allowed_tables=allowed_tables
     )

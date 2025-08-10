@@ -1,0 +1,13 @@
+database:
+  type: "api"  # or "direct"
+  api_endpoint: "https://your-app-api.com/v1"
+  token: "${DB_API_TOKEN}"
+  
+  # Schema introspection endpoint
+  schema_endpoint: "/schema"
+  
+  # Search/query endpoint for entity resolution
+  search_endpoint: "/search"
+  
+  # Rate limiting
+  max_requests_per_minute: 100

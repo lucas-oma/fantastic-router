@@ -103,6 +103,27 @@ test-server: up
 		-H "Content-Type: application/json" \
 		-d '{"query": "show me James Smith monthly income"}' | python3 -m json.tool || echo "Plan endpoint failed"
 
+test-caching: up
+	@echo "🧪 Testing dual caching system..."
+	@echo "⏳ Waiting for server to be ready..."
+	@sleep 10
+	@echo "🚀 Running caching tests..."
+	python3 examples/quickstart/test_caching.py
+
+test-natural-queries: up
+	@echo "🧪 Testing natural query variations..."
+	@echo "⏳ Waiting for server to be ready..."
+	@sleep 10
+	@echo "🚀 Running natural query tests..."
+	python3 examples/quickstart/test_natural_queries.py
+
+test-route-validation: up
+	@echo "🧪 Testing route validation..."
+	@echo "⏳ Waiting for server to be ready..."
+	@sleep 10
+	@echo "🚀 Running route validation tests..."
+	python3 examples/quickstart/test_route_validation.py
+
 # Development commands
 shell:
 	@echo "🐚 Opening shell in app container..."
