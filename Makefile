@@ -30,65 +30,65 @@ help:
 	@echo ""
 	@echo "📋 Prerequisites:"
 	@echo "  - Docker and Docker Compose installed"
-	@echo "  - Copy docker/.env.example to docker/.env and add your OpenAI API key"
+	@echo "  - Copy .env.example to .env and add your API keys"
 
 # Docker commands
 build:
 	@echo "🔨 Building Fantastic Router Docker image..."
-	docker-compose -f docker/docker-compose.yml build
+	docker-compose -f docker/docker-compose.yml --env-file .env build
 
 up:
 	@echo "🚀 Starting Fantastic Router (app + database)..."
-	docker-compose -f docker/docker-compose.yml up -d
+	docker-compose -f docker/docker-compose.yml --env-file .env up -d
 	@echo "✅ Services started!"
 	@echo "📊 Database: localhost:5432"
 	@echo "🔍 pgAdmin: http://localhost:8080 (admin@fantastic-router.com / admin)"
 
 up-db:
 	@echo "🗄️  Starting database only..."
-	docker-compose -f docker/docker-compose.yml up -d postgres
+	docker-compose -f docker/docker-compose.yml --env-file .env up -d postgres
 	@echo "✅ Database started on localhost:5432"
 
 down:
 	@echo "🛑 Stopping all services..."
-	docker-compose -f docker/docker-compose.yml down
+	docker-compose -f docker/docker-compose.yml --env-file .env down
 
 logs:
 	@echo "📋 Application logs:"
-	docker-compose -f docker/docker-compose.yml logs -f app
+	docker-compose -f docker/docker-compose.yml --env-file .env logs -f app
 
 logs-db:
 	@echo "📋 Database logs:"
-	docker-compose -f docker/docker-compose.yml logs -f postgres
+	docker-compose -f docker/docker-compose.yml --env-file .env logs -f postgres
 
 # Testing commands
 test:
 	@echo "🧪 Running basic test with mock data..."
-	docker-compose -f docker/docker-compose.yml run --rm app python examples/quickstart/example.py
+	docker-compose -f docker/docker-compose.yml --env-file .env run --rm app python examples/quickstart/example.py
 
 test-real: up-db
 	@echo "🧪 Running test with real database..."
 	@echo "⏳ Waiting for database to be ready..."
 	@sleep 5
-	docker-compose -f docker/docker-compose.yml run --rm app python examples/quickstart/test_with_real_db.py
+	docker-compose -f docker/docker-compose.yml --env-file .env run --rm app python examples/quickstart/test_with_real_db.py
 
 test-gemini: up-db
 	@echo "🧪 Testing with Gemini vs OpenAI..."
 	@echo "⏳ Waiting for database to be ready..."
 	@sleep 5
-	docker-compose -f docker/docker-compose.yml run --rm app python examples/quickstart/test_gemini.py compare
+	docker-compose -f docker/docker-compose.yml --env-file .env run --rm app python examples/quickstart/test_gemini.py compare
 
 test-all-llms: up-db
 	@echo "🧪 Testing all available LLM providers..."
 	@echo "⏳ Waiting for database to be ready..."
 	@sleep 5
-	docker-compose -f docker/docker-compose.yml run --rm app python examples/quickstart/test_all_llms.py
+	docker-compose -f docker/docker-compose.yml --env-file .env run --rm app python examples/quickstart/test_all_llms.py
 
 test-db:
 	@echo "🔍 Testing database connection..."
-	docker-compose -f docker/docker-compose.yml exec postgres pg_isready -U fantastic_user -d property_mgmt
+	docker-compose -f docker/docker-compose.yml --env-file .env exec postgres pg_isready -U fantastic_user -d property_mgmt
 	@echo "📊 Sample data:"
-	docker-compose -f docker/docker-compose.yml exec postgres psql -U fantastic_user -d property_mgmt -c "SELECT name, email, role FROM users LIMIT 5;"
+	docker-compose -f docker/docker-compose.yml --env-file .env exec postgres psql -U fantastic_user -d property_mgmt -c "SELECT name, email, role FROM users LIMIT 5;"
 
 test-server: up
 	@echo "🌐 Testing FastAPI server endpoints..."
@@ -127,79 +127,79 @@ test-route-validation: up
 # Development commands
 shell:
 	@echo "🐚 Opening shell in app container..."
-	docker-compose -f docker/docker-compose.yml run --rm app /bin/bash
+	docker-compose -f docker/docker-compose.yml --env-file .env run --rm app /bin/bash
 
 db-shell:
 	@echo "🗄️  Opening PostgreSQL shell..."
-	docker-compose -f docker/docker-compose.yml exec postgres psql -U fantastic_user -d property_mgmt
+	docker-compose -f docker/docker-compose.yml --env-file .env exec postgres psql -U fantastic_user -d property_mgmt
 
 clean:
 	@echo "🧹 Cleaning up containers and volumes..."
-	docker-compose -f docker/docker-compose.yml down -v
+	docker-compose -f docker/docker-compose.yml --env-file .env down -v
 	docker system prune -f
 	@echo "✅ Cleanup complete!"
 
 # Setup commands
 setup:
 	@echo "🔧 Setting up development environment..."
-	@if [ ! -f docker/.env ]; then \
+	@if [ ! -f .env ]; then \
 		echo "📝 Creating comprehensive .env file..."; \
-		echo "# Environment variables for Fantastic Router" > docker/.env; \
-		echo "" >> docker/.env; \
-		echo "# =============================================================================" >> docker/.env; \
-		echo "# LLM API Keys (choose one or more)" >> docker/.env; \
-		echo "# =============================================================================" >> docker/.env; \
-		echo "" >> docker/.env; \
-		echo "# OpenAI (GPT models)" >> docker/.env; \
-		echo "OPENAI_API_KEY=your-openai-api-key-here" >> docker/.env; \
-		echo "OPENAI_MODEL=gpt-3.5-turbo-1106" >> docker/.env; \
-		echo "OPENAI_MAX_TOKENS=1000" >> docker/.env; \
-		echo "" >> docker/.env; \
-		echo "# Google Gemini (fastest and often cheapest cloud option)" >> docker/.env; \
-		echo "GEMINI_API_KEY=your-google-ai-api-key-here" >> docker/.env; \
-		echo "GOOGLE_AI_API_KEY=your-google-ai-api-key-here" >> docker/.env; \
-		echo "GEMINI_MODEL=gemini-1.5-flash" >> docker/.env; \
-		echo "" >> docker/.env; \
-		echo "# Anthropic Claude (if you have direct API access)" >> docker/.env; \
-		echo "ANTHROPIC_API_KEY=your-anthropic-api-key-here" >> docker/.env; \
-		echo "ANTHROPIC_MODEL=claude-3-haiku-20240307" >> docker/.env; \
-		echo "" >> docker/.env; \
-		echo "# =============================================================================" >> docker/.env; \
-		echo "# Local LLM Configuration (Ollama)" >> docker/.env; \
-		echo "# =============================================================================" >> docker/.env; \
-		echo "" >> docker/.env; \
-		echo "# Ollama server URL (default: http://localhost:11434)" >> docker/.env; \
-		echo "OLLAMA_BASE_URL=http://localhost:11434" >> docker/.env; \
-		echo "# Recommended: mistral-small3.2:24b, llama3.1:8b, llama3.1:1b" >> docker/.env; \
-		echo "OLLAMA_MODEL=llama3.1:8b" >> docker/.env; \
-		echo "" >> docker/.env; \
-		echo "# =============================================================================" >> docker/.env; \
-		echo "# Database Configuration" >> docker/.env; \
-		echo "# =============================================================================" >> docker/.env; \
-		echo "" >> docker/.env; \
-		echo "DATABASE_URL=postgresql://fantastic_user:fantastic_pass@postgres:5432/property_mgmt" >> docker/.env; \
-		echo "DB_MAX_CONNECTIONS=10" >> docker/.env; \
-		echo "DB_TIMEOUT=30" >> docker/.env; \
-		echo "" >> docker/.env; \
-		echo "# =============================================================================" >> docker/.env; \
-		echo "# Application Configuration" >> docker/.env; \
-		echo "# =============================================================================" >> docker/.env; \
-		echo "" >> docker/.env; \
-		echo "APP_ENV=development" >> docker/.env; \
-		echo "LOG_LEVEL=INFO" >> docker/.env; \
-		echo "USE_FAST_PLANNER=true" >> docker/.env; \
-		echo "LLM_TIMEOUT=60" >> docker/.env; \
-		echo "LLM_TEMPERATURE=0.1" >> docker/.env; \
-		echo "" >> docker/.env; \
-		echo "# =============================================================================" >> docker/.env; \
-		echo "# Setup Instructions" >> docker/.env; \
-		echo "# =============================================================================" >> docker/.env; \
-		echo "# 1. Choose your LLM provider:" >> docker/.env; \
-		echo "#    - Cloud: Set OPENAI_API_KEY or GEMINI_API_KEY" >> docker/.env; \
-		echo "#    - Local: Install Ollama and set OLLAMA_MODEL" >> docker/.env; \
-		echo "# 2. Test: make test-real or make test-all-llms" >> docker/.env; \
-		echo "" >> docker/.env; \
-		echo "⚠️  Please edit docker/.env and add your API keys!"; \
+		echo "# Environment variables for Fantastic Router" > .env; \
+		echo "" >> .env; \
+		echo "# =============================================================================" >> .env; \
+		echo "# LLM API Keys (choose one or more)" >> .env; \
+		echo "# =============================================================================" >> .env; \
+		echo "" >> .env; \
+		echo "# OpenAI (GPT models)" >> .env; \
+		echo "OPENAI_API_KEY=your-openai-api-key-here" >> .env; \
+		echo "OPENAI_MODEL=gpt-3.5-turbo-1106" >> .env; \
+		echo "LLM_MAX_TOKENS=1000" >> .env; \
+		echo "" >> .env; \
+		echo "# Google Gemini (fastest and often cheapest cloud option)" >> .env; \
+		echo "GEMINI_API_KEY=your-google-ai-api-key-here" >> .env; \
+		echo "GOOGLE_AI_API_KEY=your-google-ai-api-key-here" >> .env; \
+		echo "GEMINI_MODEL=gemini-1.5-flash" >> .env; \
+		echo "" >> .env; \
+		echo "# Anthropic Claude (if you have direct API access)" >> .env; \
+		echo "ANTHROPIC_API_KEY=your-anthropic-api-key-here" >> .env; \
+		echo "ANTHROPIC_MODEL=claude-3-haiku-20240307" >> .env; \
+		echo "" >> .env; \
+		echo "# =============================================================================" >> .env; \
+		echo "# Local LLM Configuration (Ollama)" >> .env; \
+		echo "# =============================================================================" >> .env; \
+		echo "" >> .env; \
+		echo "# Ollama server URL (default: http://localhost:11434)" >> .env; \
+		echo "OLLAMA_BASE_URL=http://localhost:11434" >> .env; \
+		echo "# Recommended: mistral-small3.2:24b, llama3.1:8b, llama3.1:1b" >> .env; \
+		echo "OLLAMA_MODEL=llama3.1:8b" >> .env; \
+		echo "" >> .env; \
+		echo "# =============================================================================" >> .env; \
+		echo "# Database Configuration" >> .env; \
+		echo "# =============================================================================" >> .env; \
+		echo "" >> .env; \
+		echo "DATABASE_URL=postgresql://fantastic_user:fantastic_pass@postgres:5432/property_mgmt" >> .env; \
+		echo "DB_MAX_CONNECTIONS=10" >> .env; \
+		echo "DB_TIMEOUT=30" >> .env; \
+		echo "" >> .env; \
+		echo "# =============================================================================" >> .env; \
+		echo "# Application Configuration" >> .env; \
+		echo "# =============================================================================" >> .env; \
+		echo "" >> .env; \
+		echo "APP_ENV=development" >> .env; \
+		echo "LOG_LEVEL=INFO" >> .env; \
+		echo "USE_FAST_PLANNER=true" >> .env; \
+		echo "LLM_TIMEOUT=60" >> .env; \
+		echo "LLM_TEMPERATURE=0.1" >> .env; \
+		echo "" >> .env; \
+		echo "# =============================================================================" >> .env; \
+		echo "# Setup Instructions" >> .env; \
+		echo "# =============================================================================" >> .env; \
+		echo "# 1. Choose your LLM provider:" >> .env; \
+		echo "#    - Cloud: Set OPENAI_API_KEY or GEMINI_API_KEY" >> .env; \
+		echo "#    - Local: Install Ollama and set OLLAMA_MODEL" >> .env; \
+		echo "# 2. Test: make test-real or make test-all-llms" >> .env; \
+		echo "" >> .env; \
+		echo "⚠️  Please edit .env and add your API keys!"; \
 		echo "💡 For local LLMs: brew install ollama && ollama pull llama3.1:8b"; \
 	else \
 		echo "✅ .env file already exists"; \
@@ -210,7 +210,7 @@ setup:
 	$(MAKE) up-db
 	@echo ""
 	@echo "🎉 Setup complete! Next steps:"
-	@echo "1. Edit docker/.env and add your LLM provider keys:"
+	@echo "1. Edit .env and add your LLM provider keys:"
 	@echo "   - Cloud: OPENAI_API_KEY or GEMINI_API_KEY"
 	@echo "   - Local: Install Ollama (brew install ollama)"
 	@echo "2. Test your setup:"

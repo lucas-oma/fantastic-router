@@ -290,7 +290,7 @@ make test-db
 **"Planning failed"**:
 ```bash
 # Check logs
-docker-compose -f docker/docker-compose.yml logs app
+docker-compose -f docker/docker-compose.yml --env-file .env logs app
 
 # Try a simpler query
 curl -d '{"query": "help"}' http://localhost:8000/api/v1/plan

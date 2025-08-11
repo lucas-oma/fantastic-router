@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: fantastic_router_app
+    env_file:
+      - ../.env
+    environment:
+      - DATABASE_URL=postgresql://fantastic_user:fantastic_pass@postgres:5432/fantastic_router
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ../examples/quickstart:/app/examples/quickstart:ro
+      - ../configs:/app/configs:ro
+    networks:
+      - fantastic_router_network
+
+  postgres:
+    image: postgres:15
+    container_name: fantastic_router_postgres
+    environment:
+      POSTGRES_DB: fantastic_router
+      POSTGRES_USER: fantastic_user
+      POSTGRES_PASSWORD: fantastic_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fantastic_user -d fantastic_router"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fantastic_router_network
+
+  # Optional: pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: fantastic_router_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@fantastic-router.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8080:80"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    profiles:
+      - admin
+    networks:
+      - fantastic_router_network
+
+volumes:
+  postgres_data:
+
+networks:
+  fantastic_router_network:
+    driver: bridge
