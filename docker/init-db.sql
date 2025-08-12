@@ -1,4 +1,4 @@
--- Initialize property management database with sample data
+-- Initialize property management database with sample data (quickstart example)
 
 -- Create users table
 CREATE TABLE users (

@@ -21,7 +21,11 @@ help:
 	@echo "  test-gemini  - Compare Gemini vs OpenAI performance"
 	@echo "  test-all-llms- Test all available LLM providers"
 	@echo "  test-db      - Test database connection"
+	@echo "  test-system-db - Test system database connection"
 	@echo "  test-server  - Test the FastAPI server endpoints"
+	@echo ""
+	@echo "🔑 API Key Management:"
+	@echo "  generate-api-key - Generate a new API key for testing"
 	@echo ""
 	@echo "🔧 Development Commands:"
 	@echo "  shell      - Open shell in app container"
@@ -38,28 +42,38 @@ build:
 	docker-compose -f docker/docker-compose.yml --env-file .env build
 
 up:
-	@echo "🚀 Starting Fantastic Router (app + database)..."
+	@echo "🚀 Starting Fantastic Router (app + databases)..."
 	docker-compose -f docker/docker-compose.yml --env-file .env up -d
 	@echo "✅ Services started!"
-	@echo "📊 Database: localhost:5432"
-	@echo "🔍 pgAdmin: http://localhost:8080 (admin@fantastic-router.com / admin)"
+	@echo "📊 Domain Database: localhost:5432"
+	@echo "🔧 System Database: localhost:5433"
 
 up-db:
-	@echo "🗄️  Starting database only..."
-	docker-compose -f docker/docker-compose.yml --env-file .env up -d postgres
-	@echo "✅ Database started on localhost:5432"
+	@echo "🗄️  Starting databases only..."
+	docker-compose -f docker/docker-compose.yml --env-file .env up -d postgres system_db
+	@echo "✅ Domain Database started on localhost:5432"
+	@echo "✅ System Database started on localhost:5433"
+
+up-admin:
+	@echo "🗄️  Starting databases and pgAdmin..."
+	docker-compose -f docker/docker-compose.yml --env-file .env --profile admin up -d
+	@echo "✅ Domain Database started on localhost:5432"
+	@echo "✅ System Database started on localhost:5433"
+	@echo "🔍 pgAdmin: http://localhost:$$(grep PGADMIN_PORT .env | cut -d'=' -f2 || echo 8080) ($$(grep PGADMIN_EMAIL .env | cut -d'=' -f2 || echo admin@pgadmin.com) / $$(grep PGADMIN_PASSWORD .env | cut -d'=' -f2 || echo admin))"
 
 down:
 	@echo "🛑 Stopping all services..."
-	docker-compose -f docker/docker-compose.yml --env-file .env down
+	docker-compose -f docker/docker-compose.yml --env-file .env down --remove-orphans
 
 logs:
 	@echo "📋 Application logs:"
 	docker-compose -f docker/docker-compose.yml --env-file .env logs -f app
 
 logs-db:
-	@echo "📋 Database logs:"
+	@echo "📋 Domain Database logs:"
 	docker-compose -f docker/docker-compose.yml --env-file .env logs -f postgres
+	@echo "📋 System Database logs:"
+	docker-compose -f docker/docker-compose.yml --env-file .env logs -f system_db
 
 # Testing commands
 test:
@@ -85,10 +99,24 @@ test-all-llms: up-db
 	docker-compose -f docker/docker-compose.yml --env-file .env run --rm app python examples/quickstart/test_all_llms.py
 
 test-db:
-	@echo "🔍 Testing database connection..."
+	@echo "🔍 Testing domain database connection..."
 	docker-compose -f docker/docker-compose.yml --env-file .env exec postgres pg_isready -U fantastic_user -d property_mgmt
 	@echo "📊 Sample data:"
 	docker-compose -f docker/docker-compose.yml --env-file .env exec postgres psql -U fantastic_user -d property_mgmt -c "SELECT name, email, role FROM users LIMIT 5;"
+
+test-system-db:
+	@echo "🔍 Testing system database connection..."
+	docker-compose -f docker/docker-compose.yml --env-file .env exec system_db pg_isready -U system_user -d fantastic_router_system
+	@echo "📊 System data:"
+	docker-compose -f docker/docker-compose.yml --env-file .env exec system_db psql -U system_user -d fantastic_router_system -c "SELECT username, email, role FROM users;"
+	@echo "🔑 API Keys:"
+	docker-compose -f docker/docker-compose.yml --env-file .env exec system_db psql -U system_user -d fantastic_router_system -c "SELECT key_name, is_active FROM api_keys;"
+	@echo "🤖 LLM Providers:"
+	docker-compose -f docker/docker-compose.yml --env-file .env exec system_db psql -U system_user -d fantastic_router_system -c "SELECT provider_name, model_name, is_default FROM llm_providers;"
+
+generate-api-key:
+	@echo "🔑 Generating new API key..."
+	docker-compose -f docker/docker-compose.yml --env-file .env run --rm app python examples/quickstart/generate_api_key.py
 
 test-server: up
 	@echo "🌐 Testing FastAPI server endpoints..."
@@ -99,8 +127,13 @@ test-server: up
 	@echo ""
 	@echo "📍 API Documentation available at: http://localhost:8000/docs"
 	@echo "🔍 Testing plan endpoint:"
+	@if [ -z "$$FR_API_KEY" ]; then \
+		echo "⚠️  No FR_API_KEY set. Set it with: export FR_API_KEY=your_api_key_here"; \
+		echo "   Or run: make generate-api-key to get a key"; \
+	fi
 	curl -s -X POST http://localhost:8000/api/v1/plan \
 		-H "Content-Type: application/json" \
+		-H "Authorization: Bearer $${FR_API_KEY:-}" \
 		-d '{"query": "show me James Smith monthly income"}' | python3 -m json.tool || echo "Plan endpoint failed"
 
 test-caching: up
@@ -180,6 +213,16 @@ setup:
 		echo "DATABASE_URL=postgresql://fantastic_user:fantastic_pass@postgres:5432/property_mgmt" >> .env; \
 		echo "DB_MAX_CONNECTIONS=10" >> .env; \
 		echo "DB_TIMEOUT=30" >> .env; \
+		echo "" >> .env; \
+		echo "# =============================================================================" >> .env; \
+		echo "# pgAdmin Configuration" >> .env; \
+		echo "# =============================================================================" >> .env; \
+		echo "" >> .env; \
+		echo "# pgAdmin port (change if 8080 is already in use)" >> .env; \
+		echo "PGADMIN_PORT=8080" >> .env; \
+		echo "# pgAdmin credentials (change for production)" >> .env; \
+		echo "PGADMIN_EMAIL=admin@pgadmin.com" >> .env; \
+		echo "PGADMIN_PASSWORD=admin" >> .env; \
 		echo "" >> .env; \
 		echo "# =============================================================================" >> .env; \
 		echo "# Application Configuration" >> .env; \

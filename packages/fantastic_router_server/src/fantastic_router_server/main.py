@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api.routes import router
 from .api.health import router as health_router
+from .middlewares import APIKeyMiddleware
 
 
 @asynccontextmanager
@@ -42,6 +43,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add API key middleware
+app.add_middleware(APIKeyMiddleware, require_auth=True)
 
 # Include routers
 app.include_router(health_router, prefix="/api/v1", tags=["health"])

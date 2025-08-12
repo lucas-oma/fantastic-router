@@ -52,7 +52,7 @@ services:
     image: dpage/pgadmin4:latest
     container_name: fantastic_router_pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@fantastic-router.com
+      PGADMIN_DEFAULT_EMAIL: admin
       PGADMIN_DEFAULT_PASSWORD: admin
     ports:
       - "8080:80"

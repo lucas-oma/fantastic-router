@@ -6,6 +6,7 @@ Test script to verify complex queries generate more alternatives
 import requests
 import json
 import time
+import os
 
 def test_complex_queries():
     """Test complex queries that should have many alternatives"""
@@ -19,6 +20,18 @@ def test_complex_queries():
         "display user dashboard"
     ]
     
+    # Get API key from environment
+    api_key = os.getenv('FR_API_KEY')
+    if not api_key:
+        print("⚠️  No FR_API_KEY set. Set it with: export FR_API_KEY=your_api_key_here")
+        print("   Or run: make generate-api-key to get a key")
+        return
+    
+    # Prepare headers
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    
     for query in test_queries:
         print(f"\n🔍 Testing: '{query}'")
         print("=" * 60)
@@ -30,7 +43,7 @@ def test_complex_queries():
                 "query": query,
                 "max_alternatives": 5
             },
-            headers={"Content-Type": "application/json"}
+            headers=headers
         )
         
         if response.status_code == 200:

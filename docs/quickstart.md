@@ -229,7 +229,7 @@ SELECT name, address, status FROM properties LIMIT 5;
 ### Use pgAdmin (Optional)
 
 Visit **http://localhost:8080**:
-- 📧 **Email**: admin@fantastic-router.com
+- 📧 **Email**: admin
 - 🔑 **Password**: admin
 
 ## 🎛️ Configuration

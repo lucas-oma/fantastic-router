@@ -6,11 +6,24 @@ Test script to verify that max_alternatives parameter works correctly
 import requests
 import json
 import time
+import os
 
 def test_max_alternatives():
     """Test different max_alternatives values"""
     
     query = "find properties"
+    
+    # Get API key from environment
+    api_key = os.getenv('FR_API_KEY')
+    if not api_key:
+        print("⚠️  No FR_API_KEY set. Set it with: export FR_API_KEY=your_api_key_here")
+        print("   Or run: make generate-api-key to get a key")
+        return
+    
+    # Prepare headers
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     
     for max_alt in [1, 3, 5, 10]:
         print(f"\n🔍 Testing with max_alternatives={max_alt}")
@@ -23,7 +36,7 @@ def test_max_alternatives():
                 "query": query,
                 "max_alternatives": max_alt
             },
-            headers={"Content-Type": "application/json"}
+            headers=headers
         )
         
         if response.status_code == 200:

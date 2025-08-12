@@ -1,7 +1,26 @@
 version: '3.8'
 
 services:
-  # PostgreSQL database
+  # System database for API keys, users, authentication, etc.
+  system_db:
+    image: postgres:15
+    container_name: fantastic_router_system_db
+    environment:
+      POSTGRES_DB: fantastic_router_system
+      POSTGRES_USER: system_user
+      POSTGRES_PASSWORD: system_pass
+    ports:
+      - "5433:5432"  # Different port to avoid conflict
+    volumes:
+      - fr_system_db_data:/var/lib/postgresql/data
+      - ./init-system-db.sql:/docker-entrypoint-initdb.d/init-system-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U system_user -d fantastic_router_system"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Domain database for example property management data
   postgres:
     image: postgres:15
     container_name: fantastic_router_db
@@ -12,7 +31,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - fr_postgres_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fantastic_user -d property_mgmt"]
@@ -20,19 +39,21 @@ services:
       timeout: 5s
       retries: 5
 
-  # Fantastic Router Application
   app:
-    build: 
+    build:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: fantastic_router_app
+    ports:
+      - "8000:8000"
     environment:
       - PYTHONPATH=/app
       # Environment variables for YAML config substitution
       - DATABASE_URL=postgresql://fantastic_user:fantastic_pass@postgres:5432/property_mgmt
+      - SYSTEM_DATABASE_URL=postgresql://system_user:system_pass@system_db:5432/fantastic_router_system
       - OPENAI_API_KEY=${OPENAI_API_KEY:-your-openai-api-key-here}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-3.5-turbo-1106}
-      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-1000}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-1000} # Changed from OPENAI_MAX_TOKENS
       - GEMINI_API_KEY=${GEMINI_API_KEY:-your-google-ai-api-key-here}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-1.5-flash}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-your-anthropic-api-key-here}
@@ -46,32 +67,31 @@ services:
       - USE_FAST_PLANNER=${USE_FAST_PLANNER:-true}
       - LLM_TIMEOUT=${LLM_TIMEOUT:-60}
       - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.1}
+    volumes:
+      - ../configs:/app/configs
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - "8000:8000"
-    volumes:
-      - ../examples:/app/examples
-      - ../packages:/app/packages
-      - ../adapters:/app/adapters
-      - ../configs:/app/configs
-    # Default command now runs FastAPI server (from Dockerfile)
-    # Override for testing: command: python examples/quickstart/example.py
+      system_db:
+        condition: service_healthy
 
   # Optional: pgAdmin for database management
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: fantastic_router_pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@fantastic-router.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@pgadmin.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
     ports:
-      - "8080:80"
+      - "${PGADMIN_PORT:-8080}:80"
+    volumes:
+      - ./pgadmin-servers.json:/pgadmin4/servers.json
     depends_on:
       - postgres
+      - system_db
     profiles:
       - admin
 
 volumes:
-  postgres_data: 
+  fr_postgres_data:
+  fr_system_db_data: 

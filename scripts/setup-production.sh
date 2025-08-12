@@ -189,7 +189,7 @@ services:
     image: dpage/pgadmin4:latest
     container_name: fantastic_router_pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@fantastic-router.com
+      PGADMIN_DEFAULT_EMAIL: admin
       PGADMIN_DEFAULT_PASSWORD: admin
     ports:
       - "8080:80"
@@ -262,7 +262,7 @@ up:
 	@echo "📊 API Server: http://localhost:$(PORT)"
 	@echo "🗄️  Database: localhost:$(DB_PORT)"
 	@echo "🔴 Redis: localhost:$(REDIS_PORT)"
-	@echo "🔍 pgAdmin: http://localhost:$(PGADMIN_PORT) (admin@fantastic-router.com / admin)"
+	@echo "🔍 pgAdmin: http://localhost:$(PGADMIN_PORT) (admin / admin)"
 
 down:
 	@echo "🛑 Stopping all services..."

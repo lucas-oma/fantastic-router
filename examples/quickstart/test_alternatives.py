@@ -6,6 +6,7 @@ Test script to verify that the API returns multiple alternatives
 import requests
 import json
 import time
+import os
 
 def test_alternatives():
     """Test that the API returns multiple alternatives"""
@@ -22,6 +23,17 @@ def test_alternatives():
         print(f"\n🔍 Testing: '{query}'")
         print("=" * 50)
         
+        # Get API key from environment
+        api_key = os.getenv('FR_API_KEY')
+        if not api_key:
+            print("!! No FR_API_KEY set. Set it with: export FR_API_KEY=your_api_key_here")
+            return
+        
+        # Prepare headers
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        
         # Make API request
         response = requests.post(
             "http://localhost:8000/api/v1/plan",
@@ -29,7 +41,7 @@ def test_alternatives():
                 "query": query,
                 "max_alternatives": 5  # Request up to 5 alternatives
             },
-            headers={"Content-Type": "application/json"}
+            headers=headers
         )
         
         if response.status_code == 200:

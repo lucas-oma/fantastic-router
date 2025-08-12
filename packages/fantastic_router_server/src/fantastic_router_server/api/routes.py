@@ -12,8 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 
 from fantastic_router_core import FantasticRouter
-from fantastic_router_core.models.actions import ActionPlan
 from .deps import get_router, get_settings
+from fastapi import Request
 
 # Dual caching system: Request cache + Structural cache
 # TODO: use redis instead of in-memory cache
@@ -419,6 +419,7 @@ router = APIRouter()
 async def plan_route(
     request: PlanRequest,
     background_tasks: BackgroundTasks,
+    http_request: Request,
     fantastic_router: FantasticRouter = Depends(get_router),
     settings: Dict[str, Any] = Depends(get_settings)
 ):
@@ -515,6 +516,9 @@ async def plan_route(
         # Calculate performance metrics
         duration_ms = (time.time() - start_time) * 1000
         
+        # Get user info from middleware
+        current_user = getattr(http_request.state, 'user', None)
+        
         # Convert ActionPlan to dict for JSON serialization
         action_plan_dict = {
             "action_type": action_plan.action_type.value,
@@ -600,8 +604,9 @@ async def plan_route(
             },
             metadata={
                 "query_length": len(request.query),
-                "user_id": request.user_id,
-                "user_role": request.user_role,
+                "user_id": current_user.get("user_id") if current_user else request.user_id,
+                "user_role": current_user.get("role") if current_user else request.user_role,
+                "authenticated": current_user is not None,
                 "timestamp": start_time
             }
         )
