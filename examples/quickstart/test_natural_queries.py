@@ -79,6 +79,14 @@ def test_natural_queries():
             print(f"✅ Success!")
             print(f"🛣️  Route: {route}")
             print(f"🎯 Confidence: {confidence:.2f}")
+            
+            # Show alternatives if any
+            alternatives = response.get('alternatives', [])
+            if alternatives:
+                print(f"🔄 Alternatives ({len(alternatives)}):")
+                for j, alt in enumerate(alternatives, 1):
+                    print(f"   {j}. {alt.get('route', 'N/A')} (conf: {alt.get('confidence', 0):.2f})")
+            
             print(f"⏱️  Duration: {duration:.2f}ms")
             print(f"💾 Cache: {cache_type} (hits: {cache_hits})")
         else:

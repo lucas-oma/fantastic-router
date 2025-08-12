@@ -21,14 +21,14 @@ class SingleCallActionPlanner:
     async def plan_action(self, context: PlanningContext) -> ActionPlan:
         """Plan an action with a single LLM call instead of three"""
         
-        # Single comprehensive LLM call
+        # Single comprehensive LLM call with alternatives
         llm_response = await self._comprehensive_analysis(context)
         
         # Resolve entities based on LLM suggestions
         entities = await self._resolve_suggested_entities(llm_response, context)
         
-        # Build final action plan
-        return self._build_action_plan(context, llm_response, entities)
+        # Build final action plan with alternatives
+        return self._build_action_plan_with_alternatives(context, llm_response, entities)
     
     async def _comprehensive_analysis(self, context: PlanningContext) -> Dict[str, Any]:
         """Single LLM call that does intent parsing, entity analysis, and route matching"""
@@ -59,19 +59,25 @@ DATABASE SCHEMA:
 AVAILABLE ROUTE PATTERNS:
 {patterns_text}
 
-TASK: Analyze this query and provide a complete routing solution:
+TASK: Analyze this query and provide MULTIPLE routing solutions with different confidence levels. Generate approximately {context.max_results * 2} alternative interpretations to ensure we have enough high-quality options:
 
-1. INTENT ANALYSIS:
+1. PRIMARY ANALYSIS (highest confidence):
    - What action type (NAVIGATE, CREATE, EDIT, DELETE, QUERY)
    - What entities are mentioned
    - What view/data type is requested
 
-2. ENTITY RESOLUTION:
+2. ALTERNATIVE INTERPRETATIONS:
+   - Consider different ways to interpret the query
+   - Different entity types that could be relevant
+   - Different action types that might apply
+   - Different route patterns that could work
+
+3. ENTITY RESOLUTION:
    - For each entity, determine which database tables to search
    - Which fields to search in those tables
    - Your confidence in finding each entity
 
-3. ROUTE MATCHING:
+4. ROUTE MATCHING:
    - Which route pattern best matches this intent
    - How to fill in the pattern parameters
    - The final resolved route
@@ -85,31 +91,32 @@ TASK: Analyze this query and provide a complete routing solution:
 
 RESPONSE FORMAT (JSON):
 {{
-    "intent": {{
-        "action_type": "NAVIGATE|CREATE|EDIT|DELETE|QUERY",
-        "entities": ["entity1", "entity2"],
-        "view_type": "specific_view_or_null",
-        "confidence": 0.9
-    }},
-    "entity_resolution": [
-        {{
-            "entity_name": "James Smith",
-            "search_tables": ["users", "landlords"],
-            "search_fields": ["name", "email"],
+    "primary_plan": {{
+        "intent": {{
+            "action_type": "NAVIGATE|CREATE|EDIT|DELETE|QUERY",
+            "entities": ["entity1", "entity2"],
+            "view_type": "specific_view_or_null",
             "confidence": 0.9
-        }}
-    ],
-    "route_matching": {{
-        "matched_pattern": "/{{entity_type}}/{{entity_id}}/{{view_type}}",
-        "resolved_route": "/landlords/ENTITY_ID_PLACEHOLDER/financials",
-        "parameters": [
+        }},
+        "entity_resolution": [
             {{
-                "name": "entity_type",
-                "value": "landlords",
-                "source": "inferred"
-            }},
-            {{
-                "name": "entity_id",
+                "entity_name": "James Smith",
+                "search_tables": ["users", "landlords"],
+                "search_fields": ["name", "email"],
+                "confidence": 0.9
+            }}
+        ],
+        "route_matching": {{
+            "matched_pattern": "/{{entity_type}}/{{entity_id}}/{{view_type}}",
+            "resolved_route": "/landlords/ENTITY_ID_PLACEHOLDER/financials",
+            "parameters": [
+                {{
+                    "name": "entity_type",
+                    "value": "landlords",
+                    "source": "inferred"
+                }},
+                {{
+                    "name": "entity_id",
                 "value": "ENTITY_ID_PLACEHOLDER",
                 "source": "entity"
             }},
@@ -121,6 +128,57 @@ RESPONSE FORMAT (JSON):
         ],
         "confidence": 0.85
     }},
+    "alternatives": [
+        // Generate approximately {context.max_results * 2} alternatives with different interpretations
+        // Include variations in action types, entity types, and route patterns
+        {{
+            "intent": {{
+                "action_type": "NAVIGATE",
+                "entities": ["James Smith"],
+                "view_type": "overview",
+                "confidence": 0.7
+            }},
+            "route_matching": {{
+                "matched_pattern": "/{{entity_type}}/{{entity_id}}",
+                "resolved_route": "/landlords/ENTITY_ID_PLACEHOLDER",
+                "parameters": [
+                    {{
+                        "name": "entity_type",
+                        "value": "landlords",
+                        "source": "inferred"
+                    }},
+                    {{
+                        "name": "entity_id",
+                        "value": "ENTITY_ID_PLACEHOLDER",
+                        "source": "entity"
+                    }}
+                ],
+                "confidence": 0.7
+            }},
+            "reasoning": "Alternative: Show general landlord overview instead of specific financials"
+        }},
+        {{
+            "intent": {{
+                "action_type": "QUERY",
+                "entities": ["James Smith"],
+                "view_type": null,
+                "confidence": 0.6
+            }},
+            "route_matching": {{
+                "matched_pattern": "/{{entity_type}}/search",
+                "resolved_route": "/landlords/search",
+                "parameters": [
+                    {{
+                        "name": "entity_type",
+                        "value": "landlords",
+                        "source": "inferred"
+                    }}
+                ],
+                "confidence": 0.6
+            }},
+            "reasoning": "Alternative: Search for landlords matching the query"
+        }}
+    ],
     "overall_confidence": 0.87,
     "reasoning": "User wants to navigate to James Smith's financial information. James Smith is likely a landlord based on income context."
 }}
@@ -245,17 +303,46 @@ Analyze the query now:
         
         return entities
     
-    def _build_action_plan(
+    def _build_action_plan_with_alternatives(
         self,
         context: PlanningContext,
         llm_response: Dict[str, Any],
         entities: List[EntityMatch]
     ) -> ActionPlan:
+        """Build action plan with alternatives from LLM response"""
+        
+        # Extract primary plan
+        primary_plan_data = llm_response.get("primary_plan", llm_response)
+        primary_plan = self._build_single_action_plan(context, primary_plan_data, entities)
+        
+        # Extract alternatives
+        alternatives = []
+        alternatives_data = llm_response.get("alternatives", [])
+        
+        for alt_data in alternatives_data[:context.max_results - 1]:  # -1 because primary is included
+            try:
+                alt_plan = self._build_single_action_plan(context, alt_data, entities)
+                alternatives.append(alt_plan)
+            except Exception as e:
+                print(f"Warning: Failed to build alternative plan: {e}")
+                continue
+        
+        # Set alternatives in primary plan
+        primary_plan.alternatives = alternatives
+        
+        return primary_plan
+    
+    def _build_single_action_plan(
+        self,
+        context: PlanningContext,
+        plan_data: Dict[str, Any],
+        entities: List[EntityMatch]
+    ) -> ActionPlan:
         """Build the final action plan"""
         
         # Extract intent info with defaults
-        intent = llm_response.get('intent', {})
-        route_info = llm_response.get('route_matching', {})
+        intent = plan_data.get('intent', {})
+        route_info = plan_data.get('route_matching', {})
         
         # Validate that the LLM used a valid route pattern
         resolved_route = route_info.get('resolved_route') or '/'
@@ -310,7 +397,7 @@ Analyze the query now:
         
         # Safely extract confidence
         try:
-            confidence = float(llm_response.get('overall_confidence', 0.5))
+            confidence = float(plan_data.get('confidence', route_info.get('confidence', 0.5)))
         except (ValueError, TypeError):
             confidence = 0.5
         
@@ -324,7 +411,7 @@ Analyze the query now:
             confidence=confidence,
             parameters=parameters,
             entities=action_entities,
-            reasoning=f"LLM Analysis: {llm_response.get('reasoning', 'No reasoning provided')}",
+            reasoning=f"LLM Analysis: {plan_data.get('reasoning', 'No reasoning provided')}",
             query_params={},
             matched_pattern=matched_pattern,
             alternatives=[]

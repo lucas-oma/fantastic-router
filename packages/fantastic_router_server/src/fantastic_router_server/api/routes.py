@@ -431,75 +431,85 @@ async def plan_route(
     """
     start_time = time.time()
     
-    # Step 1: Check request-level cache (exact match)
-    request_cache_key = _generate_request_cache_key(request.query, request.user_id, request.user_role)
-    cached_response = _get_cached_response(request_cache_key, "request")
+    # Check if caching is enabled
+    cache_enabled = settings.get('caching', {}).get('enabled', True)
     cache_hits = 0
     
-    print(f"🔍 Cache Debug: Key={request_cache_key[:10]}..., Cache hit={cached_response is not None}")
-    print(f"🔍 Cache Debug: Request cache size={len(_request_cache)}, Structural cache size={len(_structural_cache)}")
-    
-    if cached_response:
-        cache_hits = 1
-        duration_ms = (time.time() - start_time) * 1000
-        cached_response["performance"]["duration_ms"] = round(duration_ms, 2)
-        cached_response["performance"]["cache_hits"] = cache_hits
-        cached_response["performance"]["cache_type"] = "request"
-        print(f"✅ Cache hit! Returning cached response")
-        return PlanResponse(**cached_response)
-    
-    # Step 2: Check structural cache (pattern matching)
-    # Try to match against existing structural patterns without LLM call
-    structural_hit = None
-    try:
-        for structural_key in _structural_cache.keys():
-            if time.time() <= _structural_cache_ttl.get(structural_key, 0):
-                # Check if this query matches the structural pattern
-                pattern_query, pattern_route = structural_key.split('|', 1)
-                
-                # Simple pattern matching - replace placeholders with actual values
-                if _matches_structural_pattern(request.query, pattern_query):
-                    # Found a structural match, try to apply it
-                    entity_mapping = _extract_entities_from_query(request.query, pattern_query)
-                    structural_hit = _apply_structural_cache(request.query, structural_key, entity_mapping)
-                    if structural_hit:
-                        break
-    except Exception as e:
-        print(f"❌ Structural cache check failed: {e}")
-        # Continue with normal flow if structural cache fails
+    if cache_enabled:
+        # TODO: if cached then: 1. Consider if response is good (chched one) 2. if many responses then use them as alternatives. £. If not many responses then call API to fill them up.
+        print("🔍 Cache enabled - checking for cached responses...")
+        
+        # Step 1: Check request-level cache (exact match)
+        request_cache_key = _generate_request_cache_key(request.query, request.user_id, request.user_role)
+        cached_response = _get_cached_response(request_cache_key, "request")
+        
+        print(f"🔍 Cache Debug: Key={request_cache_key[:10]}..., Cache hit={cached_response is not None}")
+        print(f"🔍 Cache Debug: Request cache size={len(_request_cache)}, Structural cache size={len(_structural_cache)}")
+        
+        if cached_response:
+            cache_hits = 1
+            duration_ms = (time.time() - start_time) * 1000
+            cached_response["performance"]["duration_ms"] = round(duration_ms, 2)
+            cached_response["performance"]["cache_hits"] = cache_hits
+            cached_response["performance"]["cache_type"] = "request"
+            print(f"✅ Cache hit! Returning cached response")
+            return PlanResponse(**cached_response)
+        
+        # Step 2: Check structural cache (pattern matching)
+        # Try to match against existing structural patterns without LLM call
         structural_hit = None
-    
-    if structural_hit:
-        cache_hits = 1
-        duration_ms = (time.time() - start_time) * 1000
-        structural_hit["performance"]["duration_ms"] = round(duration_ms, 2)
-        structural_hit["performance"]["cache_hits"] = cache_hits
-        structural_hit["performance"]["cache_type"] = "structural"
-        
-        # CRITICAL: Validate route in cached response too
         try:
-            route_patterns = fantastic_router.config.route_patterns if hasattr(fantastic_router.config, 'route_patterns') else []
-            cached_route = structural_hit.get("action_plan", {}).get("route", "")
-            if cached_route:
-                validated_route = _validate_and_fix_route(cached_route, structural_hit.get("action_plan", {}), route_patterns)
-                structural_hit["action_plan"]["route"] = validated_route
-                print(f"✅ Cached route validated: {validated_route}")
+            for structural_key in _structural_cache.keys():
+                if time.time() <= _structural_cache_ttl.get(structural_key, 0):
+                    # Check if this query matches the structural pattern
+                    pattern_query, pattern_route = structural_key.split('|', 1)
+                    
+                    # Simple pattern matching - replace placeholders with actual values
+                    if _matches_structural_pattern(request.query, pattern_query):
+                        # Found a structural match, try to apply it
+                        entity_mapping = _extract_entities_from_query(request.query, pattern_query)
+                        structural_hit = _apply_structural_cache(request.query, structural_key, entity_mapping)
+                        if structural_hit:
+                            break
         except Exception as e:
-            print(f"❌ Cached route validation failed: {e}")
-            # Use fallback for cached response too
-            structural_hit["action_plan"]["route"] = "/landlords/search"
-            structural_hit["action_plan"]["confidence"] = max(0.1, structural_hit["action_plan"].get("confidence", 0.5) - 0.3)
-            print(f"⚠️  Using fallback for cached route: {structural_hit['action_plan']['route']}")
+            print(f"❌ Structural cache check failed: {e}")
+            # Continue with normal flow if structural cache fails
+            structural_hit = None
         
-        print(f"✅ Cache hit! Returning cached response")
-        return PlanResponse(**structural_hit)
+        if structural_hit:
+            cache_hits = 1
+            duration_ms = (time.time() - start_time) * 1000
+            structural_hit["performance"]["duration_ms"] = round(duration_ms, 2)
+            structural_hit["performance"]["cache_hits"] = cache_hits
+            structural_hit["performance"]["cache_type"] = "structural"
+            
+            # CRITICAL: Validate route in cached response too
+            try:
+                route_patterns = fantastic_router.config.route_patterns if hasattr(fantastic_router.config, 'route_patterns') else []
+                cached_route = structural_hit.get("action_plan", {}).get("route", "")
+                if cached_route:
+                    validated_route = _validate_and_fix_route(cached_route, structural_hit.get("action_plan", {}), route_patterns)
+                    structural_hit["action_plan"]["route"] = validated_route
+                    print(f"✅ Cached route validated: {validated_route}")
+            except Exception as e:
+                print(f"❌ Cached route validation failed: {e}")
+                # Use fallback for cached response too
+                structural_hit["action_plan"]["route"] = "/landlords/search"
+                structural_hit["action_plan"]["confidence"] = max(0.1, structural_hit["action_plan"].get("confidence", 0.5) - 0.3)
+                print(f"⚠️  Using fallback for cached route: {structural_hit['action_plan']['route']}")
+            
+            print(f"✅ Cache hit! Returning cached response")
+            return PlanResponse(**structural_hit)
+    else:
+        print("🚫 Cache disabled - skipping cache checks")
     
     try:
         # Plan the action using our core router
         action_plan = await fantastic_router.plan(
             query=request.query,
             user_role=request.user_role,
-            session_data=request.context
+            session_data=request.context,
+            max_results=request.max_alternatives
         )
         
         # Calculate performance metrics
@@ -596,35 +606,39 @@ async def plan_route(
             }
         )
         
-        # Step 2: Cache the response for future requests
-        _cache_response(request_cache_key, response.dict(), "request")
-        print(f"💾 Cached response for key={request_cache_key[:10]}...")
-        
-        # Step 3: Extract and cache structural pattern for similar queries
-        try:
-            structural_key, entity_mapping = _extract_structural_pattern(request.query, action_plan_dict)
-            print(f"🔍 Structural pattern: {structural_key[:50]}...")
+        # Cache the response if caching is enabled
+        if cache_enabled:
+            # Step 2: Cache the response for future requests
+            _cache_response(request_cache_key, response.dict(), "request")
+            print(f"💾 Cached response for key={request_cache_key[:10]}...")
             
-            # Create structural cache entry with placeholders
-            structural_response = response.dict()
-            structural_response_str = json.dumps(structural_response)
-            
-            # Replace actual values with placeholders for structural cache
-            for placeholder, value in entity_mapping.items():
-                structural_response_str = structural_response_str.replace(str(value), placeholder)
-            
+            # Step 3: Extract and cache structural pattern for similar queries
             try:
-                structural_cache_entry = json.loads(structural_response_str)
-                _cache_response(structural_key, structural_cache_entry, "structural")
-                print(f"💾 Cached structural pattern for key={structural_key[:50]}...")
-            except json.JSONDecodeError:
-                # If structural caching fails, just continue
-                print(f"❌ Failed to cache structural pattern")
+                structural_key, entity_mapping = _extract_structural_pattern(request.query, action_plan_dict)
+                print(f"🔍 Structural pattern: {structural_key[:50]}...")
+                
+                # Create structural cache entry with placeholders
+                structural_response = response.dict()
+                structural_response_str = json.dumps(structural_response)
+                
+                # Replace actual values with placeholders for structural cache
+                for placeholder, value in entity_mapping.items():
+                    structural_response_str = structural_response_str.replace(str(value), placeholder)
+                
+                try:
+                    structural_cache_entry = json.loads(structural_response_str)
+                    _cache_response(structural_key, structural_cache_entry, "structural")
+                    print(f"💾 Cached structural pattern for key={structural_key[:50]}...")
+                except json.JSONDecodeError:
+                    # If structural caching fails, just continue
+                    print(f"❌ Failed to cache structural pattern")
+                    pass
+            except Exception as e:
+                print(f"❌ Failed to extract structural pattern: {e}")
+                # Continue without structural caching
                 pass
-        except Exception as e:
-            print(f"❌ Failed to extract structural pattern: {e}")
-            # Continue without structural caching
-            pass
+        else:
+            print("🚫 Cache disabled - not storing response")
         
         return response
         
