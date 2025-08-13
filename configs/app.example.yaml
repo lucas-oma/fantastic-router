@@ -357,3 +357,15 @@ monitoring:
   enable_tracing: true
   metrics_endpoint: "/metrics"
   health_check_endpoint: "/health"
+
+# Caching configuration
+caching:
+  enabled: false  # Set to false to disable caching
+  request_cache_ttl_seconds: 300  # 5 minutes
+  structural_cache_ttl_seconds: 1800  # 30 minutes
+  max_cache_size: 1000  # Maximum number of cached entries
+
+
+        # WHEN 'John Doe' THEN '2023-06-01'::date
+        # WHEN 'Emily Davis' THEN '2023-08-15'::date
+        # WHEN 'Michael Brown' THEN '2023-09-01'::date
