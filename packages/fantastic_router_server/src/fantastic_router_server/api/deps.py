@@ -3,14 +3,15 @@ FastAPI Dependencies for Fantastic Router Server
 Handles dependency injection for LLM clients, database clients, and router configuration
 """
 
-import os
 import json
-from typing import Optional, Dict, Any
-from functools import lru_cache
+import os
 from pathlib import Path
+from typing import Dict, Any, Optional
+from fastapi import Depends, HTTPException
 
-from fastapi import HTTPException, Depends
 from fantastic_router_core import FantasticRouter
+from fantastic_router_core.models.site import SiteConfiguration
+from fantastic_router_core.planning.single_call_planner import SingleCallActionPlanner
 from fantastic_router_core.planning.intent_parser import LLMClient
 from fantastic_router_core.retrieval.vector import DatabaseClient
 
@@ -49,177 +50,163 @@ class DependencyContainer:
         return self._router
     
     def _create_llm_client(self) -> LLMClient:
-        """Create LLM client based on environment variables"""
+        """Create LLM client based on YAML config"""
         
-        # Try providers in order of preference
-        
-        # 1. Try Gemini first (often fastest/cheapest)
-        gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_AI_API_KEY")
-        if gemini_key and gemini_key != "your-google-ai-api-key-here":
-            try:
-                # Import here to avoid dependency issues if not installed
-                import sys
-                sys.path.append("/app/adapters")
-                from llm.gemini import create_gemini_client
-                
-                model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
-                return create_gemini_client(api_key=gemini_key, model=model)
-            except ImportError:
-                pass
-        
-        # 2. Try OpenAI
-        openai_key = os.getenv("OPENAI_API_KEY")
-        if openai_key and openai_key != "your-openai-api-key-here":
-            try:
-                import sys
-                sys.path.append("/app/adapters")
-                from llm.openai import create_openai_client
-                
-                model = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo-1106")
-                max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", "1000"))
-                return create_openai_client(
-                    api_key=openai_key, 
-                    model=model, 
-                    max_tokens=max_tokens
-                )
-            except ImportError:
-                pass
-        
-        # 3. Try Claude
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-        if anthropic_key and anthropic_key != "your-anthropic-api-key-here":
-            try:
-                import sys
-                sys.path.append("/app/adapters")
-                from llm.anthropic import create_anthropic_client
-                
-                model = os.getenv("ANTHROPIC_MODEL", "claude-3-haiku-20240307")
-                return create_anthropic_client(api_key=anthropic_key, model=model)
-            except ImportError:
-                pass
-        
-        # 4. Try Ollama (local)
-        ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        ollama_model = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
         try:
-            import sys
-            sys.path.append("/app/adapters")
-            from llm.ollama import create_ollama_client
+            # Get LLM config from YAML
+            from ..config_loader import get_llm_config
+            llm_config = get_llm_config()
             
-            # Test if Ollama is available
-            import aiohttp
-            import asyncio
-            
-            async def test_ollama():
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(f"{ollama_base_url}/api/tags", timeout=aiohttp.ClientTimeout(total=2)) as response:
-                            return response.status == 200
-                except:
-                    return False
-            
-            # For now, assume Ollama might be available
-            return create_ollama_client(
-                base_url=ollama_base_url,
-                model=ollama_model
-            )
-        except ImportError:
+            if llm_config:
+                provider = llm_config.get('provider', 'openai')
+                
+                # Get global LLM settings
+                temperature = float(llm_config.get('temperature', 0.1))
+                max_tokens = int(llm_config.get('max_tokens', 1000))
+                timeout = int(llm_config.get('timeout', 60))
+                
+                # Get provider-specific configuration
+                if provider == "openai":
+                    openai_config = llm_config.get('openai', {})
+                    api_key = openai_config.get('api_key')
+                    model = openai_config.get('model')
+                    
+                    if api_key and api_key != "your-openai-api-key-here":
+                        try:
+                            import sys
+                            sys.path.append("/app/adapters")
+                            from llm.openai import create_openai_client
+                            return create_openai_client(
+                                api_key=api_key, 
+                                model=model, 
+                                max_tokens=max_tokens
+                            )
+                        except ImportError:
+                            pass
+                            
+                elif provider == "gemini":
+                    gemini_config = llm_config.get('gemini', {})
+                    api_key = gemini_config.get('api_key')
+                    model = gemini_config.get('model')
+                    
+                    if api_key and api_key != "your-google-ai-api-key-here":
+                        try:
+                            import sys
+                            sys.path.append("/app/adapters")
+                            from llm.gemini import create_gemini_client
+                            return create_gemini_client(
+                                api_key=api_key, 
+                                model=model,
+                                temperature=temperature
+                            )
+                        except ImportError:
+                            pass
+                            
+                elif provider == "anthropic":
+                    anthropic_config = llm_config.get('anthropic', {})
+                    api_key = anthropic_config.get('api_key')
+                    model = anthropic_config.get('model')
+                    
+                    if api_key and api_key != "your-anthropic-api-key-here":
+                        try:
+                            import sys
+                            sys.path.append("/app/adapters")
+                            from llm.anthropic import create_anthropic_client
+                            return create_anthropic_client(
+                                api_key=api_key, 
+                                model=model,
+                                temperature=temperature
+                            )
+                        except ImportError:
+                            pass
+                            
+                elif provider == "ollama":
+                    ollama_config = llm_config.get('ollama', {})
+                    base_url = ollama_config.get('base_url', 'http://localhost:11434')
+                    model = ollama_config.get('model')
+                    
+                    try:
+                        import sys
+                        sys.path.append("/app/adapters")
+                        from llm.ollama import create_ollama_client
+                        return create_ollama_client(
+                            base_url=base_url, 
+                            model=model,
+                            temperature=temperature
+                        )
+                    except ImportError:
+                        pass
+        except Exception:
             pass
         
-        # 5. Fallback to mock client
+        # Fallback to mock client if no LLM is configured
         return MockLLMClient()
     
     def _create_db_client(self) -> DatabaseClient:
-        """Create database client based on environment variables"""
-        
-        database_url = os.getenv("DATABASE_URL")
-        if not database_url:
-            raise HTTPException(
-                status_code=500,
-                detail="DATABASE_URL environment variable not set"
-            )
+        """Create database client based on YAML config"""
         
         try:
-            import sys
-            sys.path.append("/app/adapters")
-            from db.postgres import PostgreSQLDatabaseClient
+            # Get database config from YAML
+            from ..config_loader import get_database_config
+            db_config = get_database_config()
             
-            max_connections = int(os.getenv("DB_MAX_CONNECTIONS", "10"))
-            timeout = int(os.getenv("DB_TIMEOUT", "30"))
-            
-            return PostgreSQLDatabaseClient(
-                connection_string=database_url,
-                max_connections=max_connections,
-                timeout=timeout
-            )
-        except ImportError:
+            if db_config:
+                db_type = db_config.get('type', 'direct')
+                
+                if db_type == 'api':
+                    # API-based database client
+                    try:
+                        import sys
+                        sys.path.append("/app/adapters")
+                        from db.supabase import SupabaseDatabaseClient
+                        
+                        api_config = db_config.get('api', {})
+                        api_endpoint = api_config.get('endpoint')
+                        token = api_config.get('token')
+                        
+                        if api_endpoint and token:
+                            return SupabaseDatabaseClient(
+                                api_endpoint=api_endpoint,
+                                token=token,
+                                schema_endpoint=api_config.get('schema_endpoint', '/schema'),
+                                search_endpoint=api_config.get('search_endpoint', '/search'),
+                                rate_limit=api_config.get('max_requests_per_minute', 100)
+                            )
+                    except ImportError:
+                        pass
+                        
+                elif db_type == 'direct':
+                    # Direct database connection
+                    connection_string = db_config.get('connection_string')
+                    if not connection_string:
+                        raise HTTPException(
+                            status_code=500,
+                            detail="Database connection string not configured"
+                        )
+                    
+                    try:
+                        import sys
+                        sys.path.append("/app/adapters")
+                        from db.postgres import PostgreSQLDatabaseClient
+                        
+                        max_connections = int(db_config.get('max_connections', 10))
+                        timeout = int(db_config.get('timeout', 30))
+                        
+                        return PostgreSQLDatabaseClient(
+                            connection_string=connection_string,
+                            max_connections=max_connections,
+                            timeout=timeout
+                        )
+                    except ImportError:
+                        raise HTTPException(
+                            status_code=500,
+                            detail="PostgreSQL dependencies not available"
+                        )
+        except Exception as e:
             raise HTTPException(
                 status_code=500,
-                detail="PostgreSQL dependencies not available"
+                detail=f"Database configuration error: {str(e)}"
             )
-    
-    def _load_config(self) -> Dict[str, Any]:
-        """Load router configuration"""
-        
-        # Try to load from various locations
-        config_paths = [
-            "/app/examples/quickstart/routes.json",
-            "/app/routes.json",
-            "routes.json"
-        ]
-        
-        for config_path in config_paths:
-            try:
-                if Path(config_path).exists():
-                    with open(config_path, 'r') as f:
-                        return json.load(f)
-            except Exception:
-                continue
-        
-        # Fallback to basic config
-        return {
-            "domain": "property_management",
-            "base_url": "https://myapp.com",
-            "entities": {
-                "person": {
-                    "name": "person",
-                    "table": "users",
-                    "description": "People in the system",
-                    "search_fields": ["name", "email"],
-                    "display_field": "name",
-                    "unique_identifier": "id"
-                }
-            },
-            "route_patterns": [
-                {
-                    "pattern": "/{entity_type}/{entity_id}/{view_type}",
-                    "name": "entity_detail_view",
-                    "description": "View specific details for an entity instance",
-                    "intent_patterns": [
-                        "show {entity} {view_data}",
-                        "view {entity} {view_data}"
-                    ],
-                    "parameters": {
-                        "entity_type": {"type": "string", "required": True},
-                        "entity_id": {"type": "string", "required": True},
-                        "view_type": {"type": "string", "required": True}
-                    }
-                }
-            ],
-            "database_schema": {
-                "tables": {
-                    "users": {
-                        "name": "users",
-                        "description": "All users in the system",
-                        "columns": [
-                            {"name": "id", "type": "uuid"},
-                            {"name": "name", "type": "varchar"},
-                            {"name": "email", "type": "varchar"}
-                        ]
-                    }
-                }
-            }
-        }
     
     def _create_router(self) -> FantasticRouter:
         """Create the main router instance"""
@@ -310,6 +297,106 @@ class DependencyContainer:
                 status_code=500,
                 detail=f"Failed to create router: {str(e)}"
             )
+    
+    def _load_config(self) -> Dict[str, Any]:
+        """Load router configuration"""
+        
+        try:
+            # Use the config loader to get configuration
+            from ..config_loader import get_config
+            config = get_config()
+            
+            # If it's a YAML config, extract the router-specific parts
+            if 'app' in config:
+                # This is a YAML config, extract router config
+                router_config = {
+                    "domain": config.get('app', {}).get('domain', 'property_management'),
+                    "base_url": config.get('app', {}).get('base_url', 'https://myapp.com'),
+                    "entities": config.get('entities', {}),
+                    "route_patterns": config.get('routes', []),
+                    "database_schema": config.get('schema', {}),
+                    "semantic_mappings": config.get('semantic_mappings', {}),
+                    "default_actions": config.get('default_actions', [])
+                }
+                return router_config
+            else:
+                # This is a legacy JSON config, return as-is
+                return config
+                
+        except Exception as e:
+            # Fallback to basic config
+            return {
+                "domain": "property_management",
+                "base_url": "https://myapp.com",
+                "entities": {
+                    "person": {
+                        "name": "person",
+                        "table": "users",
+                        "description": "People in the system",
+                        "search_fields": ["name", "email"],
+                        "display_field": "name",
+                        "unique_identifier": "id"
+                    }
+                },
+                "route_patterns": [
+                    {
+                        "pattern": "/{entity_type}/{entity_id}/{view_type}",
+                        "name": "entity_detail_view",
+                        "description": "View specific details for an entity instance",
+                        "intent_patterns": [
+                            "show {entity} {view_data}",
+                            "view {entity} {view_data}"
+                        ],
+                        "parameters": {
+                            "entity_type": {"type": "string", "required": True},
+                            "entity_id": {"type": "string", "required": True},
+                            "view_type": {"type": "string", "required": True}
+                        }
+                    }
+                ],
+                "database_schema": {
+                    "tables": {
+                        "users": {
+                            "name": "users",
+                            "description": "All users in the system",
+                            "columns": [
+                                {"name": "id", "type": "uuid"},
+                                {"name": "name", "type": "varchar"},
+                                {"name": "email", "type": "varchar"}
+                            ]
+                        }
+                    }
+                }
+            }
+    
+    def _load_settings(self) -> Dict[str, Any]:
+        """Load application settings from YAML config"""
+        try:
+            # Use the config loader to get configuration
+            from ..config_loader import get_config
+            config = get_config()
+            
+            # Extract settings from YAML config
+            app_config = config.get('app', {})
+            llm_config = config.get('llm', {})
+            logging_config = config.get('logging', {})
+            
+            return {
+                "app_env": app_config.get('environment', 'development'),
+                "log_level": logging_config.get('level', 'INFO'),
+                "llm_timeout": int(llm_config.get('timeout', 60)),
+                "llm_temperature": float(llm_config.get('temperature', 0.1)),
+                "use_fast_planner": app_config.get('use_fast_planner', True)
+            }
+        except Exception as e:
+            # Fallback to environment variables if YAML config fails
+            return {
+                "app_env": os.getenv("APP_ENV", "development"),
+                "log_level": os.getenv("LOG_LEVEL", "INFO"),
+                "llm_timeout": int(os.getenv("LLM_TIMEOUT", "60")),
+                "llm_temperature": float(os.getenv("LLM_TEMPERATURE", "0.1")),
+                "use_fast_planner": os.getenv("USE_FAST_PLANNER", "true").lower() == "true"
+            }
 
 
 class MockLLMClient:
@@ -332,7 +419,11 @@ _container = DependencyContainer()
 
 
 # FastAPI dependency functions
-@lru_cache()
+def get_router() -> FantasticRouter:
+    """Get the router instance"""
+    return _container.router
+
+
 def get_settings() -> Dict[str, Any]:
     """Get application settings"""
     return {
@@ -341,23 +432,3 @@ def get_settings() -> Dict[str, Any]:
         "llm_timeout": int(os.getenv("LLM_TIMEOUT", "60")),
         "llm_temperature": float(os.getenv("LLM_TEMPERATURE", "0.1"))
     }
-
-
-def get_container() -> DependencyContainer:
-    """Get the dependency container"""
-    return _container
-
-
-def get_router(container: DependencyContainer = Depends(get_container)) -> FantasticRouter:
-    """Get the router instance"""
-    return container.router
-
-
-def get_llm_client(container: DependencyContainer = Depends(get_container)) -> LLMClient:
-    """Get the LLM client"""
-    return container.llm_client
-
-
-def get_db_client(container: DependencyContainer = Depends(get_container)) -> DatabaseClient:
-    """Get the database client"""
-    return container.db_client

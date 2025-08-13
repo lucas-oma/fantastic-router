@@ -1,4 +1,4 @@
--- Initialize property management database with sample data
+-- Initialize property management database with sample data (quickstart example)
 
 -- Create users table
 CREATE TABLE users (
@@ -93,9 +93,9 @@ SELECT
         WHEN 'Michael Brown' THEN 1800.00
     END,
     CASE u.name 
-        WHEN 'John Doe' THEN '2023-06-01'
-        WHEN 'Emily Davis' THEN '2023-08-15'
-        WHEN 'Michael Brown' THEN '2023-09-01'
+        WHEN 'John Doe' THEN '2023-06-01'::date
+        WHEN 'Emily Davis' THEN '2023-08-15'::date
+        WHEN 'Michael Brown' THEN '2023-09-01'::date
     END
 FROM users u 
 WHERE u.role = 'tenant';
@@ -148,8 +148,6 @@ AND p.address = lease_data.property_addr;
 UPDATE tenants 
 SET lease_id = l.id
 FROM leases l
-JOIN users u ON tenants.user_id = u.id
-JOIN users tu ON l.tenant_id = tenants.id
 WHERE tenants.id = l.tenant_id;
 
 -- Create indexes for better performance

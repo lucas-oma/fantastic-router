@@ -185,7 +185,7 @@ async def test_real_system():
     print("\n💡 Tips:")
     print("- Check the database has data: docker-compose exec postgres psql -U fantastic_user -d property_mgmt -c 'SELECT * FROM users;'")
     print("- View logs: docker-compose logs app")
-    print("- Access pgAdmin: http://localhost:8080 (admin@fantastic-router.com / admin)")
+    print(f"- Access pgAdmin: http://localhost:{os.getenv('PGADMIN_PORT', '8080')} (admin@pgadmin.com / admin)")
 
 
 class MockLLMClient:
